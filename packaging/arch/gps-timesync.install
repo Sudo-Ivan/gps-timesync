@@ -1,0 +1,13 @@
+post_install() {
+    echo "GPS Time Sync has been installed."
+    echo "You can now use 'man gps-timesync' to view the manual."
+    echo "Note: Root privileges are required for time synchronization."
+}
+
+post_upgrade() {
+    post_install
+}
+
+post_remove() {
+    echo "GPS Time Sync has been removed."
+} 

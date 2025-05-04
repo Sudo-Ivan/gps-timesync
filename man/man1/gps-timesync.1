@@ -1,0 +1,59 @@
+.TH GPS-TIMESYNC 1 "March 2024" "Version 1.0" "GPS Time Synchronization Tool"
+.SH NAME
+gps-timesync \- GPS time synchronization tool for Linux, BSD, and Windows systems
+.SH SYNOPSIS
+.B gps-timesync
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B gps-timesync
+is a tool for synchronizing system time with GPS time and monitoring GPS data. It supports automatic GPS device detection, NMEA sentence parsing, and real-time GPS data monitoring across multiple platforms.
+.SH OPTIONS
+.TP
+.BR \-d ", " \-\-device " " \fIDEVICE\fR
+Specify GPS device path (e.g., /dev/ttyUSB0 or COM1)
+.TP
+.BR \-b ", " \-\-baud " " \fIRATE\fR
+Specify baud rate (default: 9600)
+.TP
+.BR \-db ", " \-\-debug
+Enable debug mode
+.TP
+.BR \-m ", " \-\-monitor
+Monitor for new GPS devices
+.TP
+.BR \-\-interval " " \fISECONDS\fR
+Polling interval in seconds for monitor mode (default: 5)
+.SH EXAMPLES
+.TP
+.B Automatic device detection:
+gps-timesync
+.TP
+.B Specify device and baud rate:
+gps-timesync -d /dev/ttyUSB0 -b 9600
+.TP
+.B Monitor for new devices:
+gps-timesync -m --interval 10
+.SH EXIT STATUS
+.TP
+.B 0
+Successful completion
+.TP
+.B 1
+Error occurred
+.SH REQUIREMENTS
+.TP
+.B Root/Sudo privileges
+Required for time synchronization on Unix-like systems
+.TP
+.B GPS device
+USB GPS dongle or serial GPS device
+.SH AUTHOR
+Written by Ivan
+.SH BUGS
+Report bugs to: https://github.com/Sudo-Ivan/gps-timesync/issues
+.SH COPYRIGHT
+Copyright © 2024 Ivan
+License: MIT
+.SH SEE ALSO
+.BR date (1),
+.BR stty (1) 

@@ -1,0 +1,26 @@
+# Maintainer: Ivan <github.com/Sudo-Ivan>
+
+pkgname=gps-timesync
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="GPS time synchronization tool for Linux, BSD, and Windows systems"
+arch=('x86_64' 'i686' 'armv7h' 'aarch64')
+url="https://github.com/Sudo-Ivan/gps-timesync"
+license=('MIT')
+makedepends=('go')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/Sudo-Ivan/gps-timesync/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$pkgname-$pkgver"
+    make build
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    make DESTDIR="$pkgdir" install
+
+    # Install man page
+    install -Dm644 man/man1/gps-timesync.1 "$pkgdir/usr/share/man/man1/gps-timesync.1"
+    gzip -f "$pkgdir/usr/share/man/man1/gps-timesync.1"
+} 
