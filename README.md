@@ -2,6 +2,9 @@
 
 A lightweight GPS time synchronization tool for Linux, BSD, and Windows systems. This tool synchronizes your system time with GPS time using a GPS module or USB dongle.
 
+[![DeepSource](https://app.deepsource.com/gh/Sudo-Ivan/gps-timesync.svg/?label=active+issues&show_trend=true&token=2L1lQ7ldwu37DSctPOqw-s5v)](https://app.deepsource.com/gh/Sudo-Ivan/gps-timesync/)
+[![Socket](https://socket.dev/api/badge/go/package/github.com/sudo-ivan/gps-timesync?version=v1.0.0)](https://socket.dev/api/badge/go/package/github.com/sudo-ivan/gps-timesync?version=v1.0.0)
+
 ## Features
 
 - Zero dependencies (uses only standard library)
