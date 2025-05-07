@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"runtime"
@@ -17,12 +18,52 @@ import (
 )
 
 var (
-	talkerID        string
-	numSatellites   int
-	comPortName     string    // For Windows
-	staticLatitude  = 51.1173 // Slightly more realistic degrees.decimal format for NMEA
-	staticLongitude = -2.5166 // Example: 5107.038,N -> 51 deg, 07.038 min. -00231.000,W -> 2 deg, 31.000 min
+	talkerID      string
+	numSatellites int
+	comPortName   string // For Windows
+	// Initial position with slight random variation
+	baseLatitude  = 51.1173
+	baseLongitude = -2.5166
+	// Movement parameters
+	movementEnabled bool
+	movementSpeed   float64 // degrees per second
+	movementBearing float64 // degrees from north
+	// Satellite configuration
+	gpsPRNs     = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+	glonassPRNs = []int{65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96}
 )
+
+// Position represents a geographic position
+type Position struct {
+	Latitude  float64
+	Longitude float64
+}
+
+// Calculate new position based on movement
+func calculateNewPosition(current Position, speed float64, bearing float64, elapsed time.Duration) Position {
+	// Convert speed from degrees/second to degrees
+	distance := speed * elapsed.Seconds()
+
+	// Convert bearing to radians
+	bearingRad := bearing * (math.Pi / 180.0)
+
+	// Calculate new position using great circle formula
+	lat1 := current.Latitude * (math.Pi / 180.0)
+	lon1 := current.Longitude * (math.Pi / 180.0)
+
+	angularDistance := distance * (math.Pi / 180.0)
+
+	lat2 := math.Asin(math.Sin(lat1)*math.Cos(angularDistance) +
+		math.Cos(lat1)*math.Sin(angularDistance)*math.Cos(bearingRad))
+
+	lon2 := lon1 + math.Atan2(math.Sin(bearingRad)*math.Sin(angularDistance)*math.Cos(lat1),
+		math.Cos(angularDistance)-math.Sin(lat1)*math.Sin(lat2))
+
+	return Position{
+		Latitude:  lat2 * (180.0 / math.Pi),
+		Longitude: lon2 * (180.0 / math.Pi),
+	}
+}
 
 // Converts degrees to NMEA DDDMM.MMMM format
 func toNMEALat(deg float64) (string, string) {
@@ -51,17 +92,34 @@ func toNMEALon(deg float64) (string, string) {
 
 // Function to write NMEA sentences periodically
 func writeNMEASentences(writer io.Writer) {
-	ticker := time.NewTicker(1 * time.Second) // Send data every 1 second for more responsiveness
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
+
+	currentPos := Position{
+		Latitude:  baseLatitude,
+		Longitude: baseLongitude,
+	}
+	lastUpdate := time.Now()
+
+	// Retry configuration
+	maxRetries := 3
+	retryDelay := time.Second * 2
 
 	for {
 		<-ticker.C
 		timeUTC := time.Now().UTC()
 		timeStrNMEA := timeUTC.Format("150405.00")
-		dateStrNMEA := timeUTC.Format("020106") // DDMMYY
+		dateStrNMEA := timeUTC.Format("020106")
 
-		latNMEA, ns := toNMEALat(staticLatitude)
-		lonNMEA, ew := toNMEALon(staticLongitude)
+		// Update position if movement is enabled
+		if movementEnabled {
+			elapsed := time.Since(lastUpdate)
+			currentPos = calculateNewPosition(currentPos, movementSpeed, movementBearing, elapsed)
+			lastUpdate = time.Now()
+		}
+
+		latNMEA, ns := toNMEALat(currentPos.Latitude)
+		lonNMEA, ew := toNMEALon(currentPos.Longitude)
 
 		var sentences []string
 
@@ -78,43 +136,68 @@ func writeNMEASentences(writer io.Writer) {
 			talkerID, timeStrNMEA, latNMEA, ns, lonNMEA, ew, numSatellites, hdop, altitude)
 		sentences = append(sentences, addChecksumAndCRLF(gpggaBody))
 
-		// GPGSV sentences (Satellites in View)
-		// $--GSV,NumMsg,MsgNum,NumSV,PRN,Elev,Azim,SNR,PRN,Elev,Azim,SNR,...*CS
-		// Simulate up to 12 satellites in view for this example, can be expanded.
-		numSVInView := numSatellites + rand.Intn(5) // Slightly more in view than locked
+		// Enhanced GPGSV sentences with realistic PRNs
+		numSVInView := numSatellites + rand.Intn(5)
 		if numSVInView < numSatellites {
 			numSVInView = numSatellites
 		}
-		if numSVInView > 20 { // Cap at 20 for this simulation
+		if numSVInView > 20 {
 			numSVInView = 20
 		}
-		numGSVMsgs := (numSVInView + 3) / 4 // Each GSV message can hold up to 4 SVs
 
+		// Select appropriate PRNs based on talker ID
+		var availablePRNs []int
+		switch strings.ToUpper(talkerID) {
+		case "GN":
+			// Mix GPS and GLONASS PRNs
+			availablePRNs = append(gpsPRNs, glonassPRNs...)
+		case "GP":
+			availablePRNs = gpsPRNs
+		case "GL":
+			availablePRNs = glonassPRNs
+		default:
+			availablePRNs = gpsPRNs
+		}
+
+		// Shuffle and select PRNs
+		rand.Shuffle(len(availablePRNs), func(i, j int) {
+			availablePRNs[i], availablePRNs[j] = availablePRNs[j], availablePRNs[i]
+		})
+		selectedPRNs := availablePRNs[:numSVInView]
+
+		numGSVMsgs := (numSVInView + 3) / 4
 		for i := 0; i < numGSVMsgs; i++ {
 			msgNum := i + 1
 			gsvBody := fmt.Sprintf("%sGSV,%d,%d,%02d", talkerID, numGSVMsgs, msgNum, numSVInView)
+
 			for sv := 0; sv < 4; sv++ {
 				svIndex := i*4 + sv
 				if svIndex < numSVInView {
-					prn := svIndex + 1         // Simple PRN assignment
-					elevation := rand.Intn(90) // 0-89 degrees
-					azimuth := rand.Intn(360)  // 0-359 degrees
-					snr := rand.Intn(50) + 20  // Meaningful SNR 20-70
+					prn := selectedPRNs[svIndex]
+					elevation := rand.Intn(90)
+					azimuth := rand.Intn(360)
+					snr := rand.Intn(50) + 20
 					gsvBody += fmt.Sprintf(",%02d,%02d,%03d,%02d", prn, elevation, azimuth, snr)
 				} else {
-					// Fill with empty fields if no more SVs for this message but message needs 4 slots
-					// No, NMEA spec says to only list actual SVs, not empty trailing fields for them.
 					break
 				}
 			}
 			sentences = append(sentences, addChecksumAndCRLF(gsvBody))
 		}
 
+		// Write sentences with retry logic
 		for _, sentence := range sentences {
-			_, err := writer.Write([]byte(sentence))
+			var err error
+			for retry := 0; retry < maxRetries; retry++ {
+				_, err = writer.Write([]byte(sentence))
+				if err == nil {
+					break
+				}
+				log.Printf("Error writing NMEA sentence (attempt %d/%d): %v", retry+1, maxRetries, err)
+				time.Sleep(retryDelay)
+			}
 			if err != nil {
-				log.Printf("Error writing NMEA sentence: %v", err)
-				// Consider whether to return or just log and continue
+				log.Printf("Failed to write NMEA sentence after %d attempts: %v", maxRetries, err)
 				return
 			}
 			log.Printf("Sent: %s", strings.TrimSpace(sentence))
@@ -142,9 +225,12 @@ func addChecksumAndCRLF(sentenceBody string) string {
 func main() {
 	flag.StringVar(&talkerID, "talker", "GP", "NMEA Talker ID (e.g., GP, GN, GL, GA)")
 	flag.IntVar(&numSatellites, "sats", 7, "Number of satellites to simulate in $GPGGA (fix quality)")
+	flag.BoolVar(&movementEnabled, "move", false, "Enable position movement simulation")
+	flag.Float64Var(&movementSpeed, "speed", 0.0001, "Movement speed in degrees per second")
+	flag.Float64Var(&movementBearing, "bearing", 0, "Movement bearing in degrees from north (0-360)")
 
 	if runtime.GOOS == "windows" {
-		flag.StringVar(&comPortName, "com", "", "COM port to use for simulation (e.g., COM3) - this should be one end of a virtual serial port pair")
+		flag.StringVar(&comPortName, "com", "", "COM port to use for simulation (e.g., COM3)")
 	}
 	flag.Parse()
 
@@ -186,6 +272,9 @@ func main() {
 	} else if runtime.GOOS == "windows" {
 		if comPortName == "" {
 			log.Fatal("On Windows, you must specify the COM port using the -com flag (e.g., -com COM3)")
+		}
+		if !strings.HasPrefix(strings.ToUpper(comPortName), "COM") {
+			log.Fatal("Invalid COM port name. Must start with 'COM' (e.g., COM3)")
 		}
 
 		log.Printf("Attempting to open COM port: %s", comPortName)
