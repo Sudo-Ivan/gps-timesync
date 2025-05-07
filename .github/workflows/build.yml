@@ -62,7 +62,7 @@ jobs:
       with:
         go-version: '1.24'
 
-    - name: Build
+    - name: Build Main Application
       id: build_step
       env:
         GOOS: ${{ matrix.goos }}
@@ -77,11 +77,32 @@ jobs:
         go build -v -ldflags="-s -w" -o "${output_name}" .
         echo "Built: ${output_name}"
 
-    - name: Upload Artifact
+    - name: Build Simulator
+      id: build_simulator
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        GOARM: ${{ matrix.goarch == 'arm' && '6' || '' }}
+      run: |
+        output_name="gps-simulator-${GOOS}-${GOARCH}"
+        if [ "$GOOS" = "windows" ]; then
+          output_name+=".exe"
+        fi
+        cd gps-simulator
+        go build -v -ldflags="-s -w" -o "../${output_name}" simulator.go
+        echo "Built: ${output_name}"
+
+    - name: Upload Main Application Artifact
       uses: actions/upload-artifact@v4
       with:
         name: gps-timesync-${{ matrix.goos }}-${{ matrix.goarch }}
         path: gps-timesync-${{ matrix.goos }}-${{ matrix.goarch }}*
+
+    - name: Upload Simulator Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gps-simulator-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: gps-simulator-${{ matrix.goos }}-${{ matrix.goarch }}*
 
   release:
     name: Create Release
