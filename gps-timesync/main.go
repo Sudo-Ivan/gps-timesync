@@ -28,6 +28,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Sudo-Ivan/gps-timesync/pkg/device"
+	"github.com/Sudo-Ivan/gps-timesync/pkg/gps"
 )
 
 // Common error definitions for the package.
@@ -484,19 +487,29 @@ func main() {
 	monitorFlag := flag.Bool("monitor", false, "Monitor for new GPS devices")
 	monitorShortFlag := flag.Bool("m", false, "Short flag for -monitor")
 	intervalFlag := flag.Int("interval", 5, "Polling interval in seconds for monitor mode (default: 5)")
+	noRootFlag := flag.Bool("no-root", false, "Bypass root/sudo check (use with caution)")
 
 	// Add short flags
 	flag.StringVar(deviceFlag, "d", "", "Short flag for -device")
 	flag.IntVar(baudFlag, "b", 9600, "Short flag for -baud")
 	flag.BoolVar(debugFlag, "db", false, "Short flag for -debug")
+	flag.BoolVar(noRootFlag, "nr", false, "Short flag for --no-root")
 
 	flag.Parse()
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	// Check for root privileges on Unix systems
-	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
-		log.Fatal("This program must be run as root/sudo")
+	if runtime.GOOS != "windows" {
+		if os.Geteuid() != 0 { // Not running as root
+			if *noRootFlag {
+				log.Println("Warning: Running without root privileges due to --no-root flag.")
+				log.Println("Time synchronization and some device configurations may fail.")
+				log.Println("Ensure the user has necessary permissions for the specified device and time setting if not running as root.")
+			} else {
+				log.Fatal("This program must be run as root/sudo to ensure full functionality. Use --no-root or -nr to bypass this check if you understand the implications (e.g., for monitoring only, or if permissions are already set for your user).")
+			}
+		}
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -504,7 +517,7 @@ func main() {
 
 	// Handle monitor mode
 	if *monitorFlag || *monitorShortFlag {
-		if err := monitorDevices(*intervalFlag, *debugFlag); err != nil {
+		if err := device.MonitorDevices(*intervalFlag, *debugFlag); err != nil {
 			log.Fatalf("Error in monitor mode: %v", err)
 		}
 		return
@@ -515,8 +528,9 @@ func main() {
 	// If device is specified via command line, use it
 	if *deviceFlag != "" {
 		selectedDevice = *deviceFlag
-		gps := NewGPSTimeSync(selectedDevice, *baudFlag, *debugFlag)
-		isGPS, err := gps.isGPSDevice(selectedDevice)
+		gpsInstance := gps.NewGPSTimeSync(selectedDevice, *baudFlag, *debugFlag)
+		defer gpsInstance.Cancel() // Defer cancel after gpsInstance is created
+		isGPS, err := gpsInstance.IsGPSDevice(selectedDevice)
 		if err != nil {
 			log.Fatalf("Error testing device: %v", err)
 		}
@@ -526,14 +540,14 @@ func main() {
 		fmt.Printf("Using specified device: %s\n", selectedDevice)
 	} else {
 		// Otherwise, search for devices
-		devices, err := findGPSDevices(*debugFlag)
+		devices, err := device.FindGPSDevices(*debugFlag)
 		if err != nil {
 			log.Fatalf("Error finding GPS devices: %v", err)
 		}
 
 		fmt.Println("Found potential GPS devices:")
-		for i, device := range devices {
-			fmt.Printf("%d. %s\n", i+1, device)
+		for i, d := range devices {
+			fmt.Printf("%d. %s\n", i+1, d)
 		}
 
 		for {
@@ -557,28 +571,37 @@ func main() {
 			selectedDevice = devices[index-1]
 			fmt.Printf("Testing device %s...\n", selectedDevice)
 
-			gps := NewGPSTimeSync(selectedDevice, *baudFlag, *debugFlag)
-			isGPS, err := gps.isGPSDevice(selectedDevice)
+			gpsInstance := gps.NewGPSTimeSync(selectedDevice, *baudFlag, *debugFlag)
+			defer gpsInstance.Cancel() // Defer cancel for this scope as well
+			isGPS, err := gpsInstance.IsGPSDevice(selectedDevice)
 			if err != nil {
 				fmt.Printf("Error testing device: %v\n", err)
+				// gpsInstance.Cancel() // Not strictly needed here due to defer, but good for clarity if loop continues differently
 				continue
 			}
 			if isGPS {
 				fmt.Printf("Confirmed %s is a GPS device.\n", selectedDevice)
+				// gpsInstance.Cancel() // Not strictly needed here due to defer
 				break
 			} else {
 				fmt.Printf("%s does not appear to be a GPS device. Please select another device.\n", selectedDevice)
+				// gpsInstance.Cancel() // Not strictly needed here due to defer
 			}
 		}
 	}
 
-	gps := NewGPSTimeSync(selectedDevice, *baudFlag, *debugFlag)
-	defer gps.cancel()
+	// Create the main gpsInstance only after a device has been successfully selected and confirmed.
+	// The defer gps.Cancel() from the previous block might be on a different gpsInstance if we re-scoped.
+	// It's safer to create the one true gpsInstance here that the rest of the app uses.
+	// However, the current logic reuses selectedDevice and re-initializes gpsInstance outside the loop, which is fine.
+
+	gpsInstance := gps.NewGPSTimeSync(selectedDevice, *baudFlag, *debugFlag)
+	defer gpsInstance.Cancel() // This is the main cancel for the application's gpsInstance
 
 	go func() {
 		<-sigChan
 		fmt.Println("\nReceived interrupt signal. Shutting down...")
-		gps.cancel()
+		gpsInstance.Cancel()
 	}()
 
 	for {
@@ -596,11 +619,11 @@ func main() {
 
 		switch choice {
 		case 1:
-			if err := gps.syncTime(); err != nil {
+			if err := gpsInstance.SyncTime(); err != nil {
 				log.Printf("Failed to sync time: %v", err)
 			}
 		case 2:
-			if err := gps.monitorGPS(); err != nil {
+			if err := gpsInstance.MonitorGPS(); err != nil {
 				if !errors.Is(err, context.Canceled) {
 					log.Printf("Failed to monitor GPS: %v", err)
 				}
