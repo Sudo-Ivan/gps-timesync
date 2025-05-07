@@ -70,11 +70,12 @@ jobs:
         # Set GOARM=6 for Raspberry Pi Zero compatibility when building for ARM
         GOARM: ${{ matrix.goarch == 'arm' && '6' || '' }}
       run: |
+        cd gps-timesync
         output_name="gps-timesync-${GOOS}-${GOARCH}"
         if [ "$GOOS" = "windows" ]; then
           output_name+=".exe"
         fi
-        go build -v -ldflags="-s -w" -o "${output_name}" .
+        go build -v -ldflags="-s -w" -o "../${output_name}" .
         echo "Built: ${output_name}"
 
     - name: Build Simulator
@@ -84,11 +85,11 @@ jobs:
         GOARCH: ${{ matrix.goarch }}
         GOARM: ${{ matrix.goarch == 'arm' && '6' || '' }}
       run: |
+        cd gps-simulator
         output_name="gps-simulator-${GOOS}-${GOARCH}"
         if [ "$GOOS" = "windows" ]; then
           output_name+=".exe"
         fi
-        cd gps-simulator
         go build -v -ldflags="-s -w" -o "../${output_name}" simulator.go
         echo "Built: ${output_name}"
 
