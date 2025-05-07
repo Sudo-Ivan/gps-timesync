@@ -7,7 +7,7 @@ A lightweight GPS time synchronization tool for Linux, BSD, and Windows systems.
 
 ## Features
 
-- Zero dependencies (uses only standard library)
+- Zero dependencies for core functionality, simulator only uses `github.com/creack/pty`
 - Supports NMEA GPRMC sentences
 - Automatic serial port configuration
 - Interactive device detection and selection
@@ -78,6 +78,13 @@ Available options:
 - `-db, --debug`: Enable debug mode
 - `-m, --monitor`: Monitor for new GPS devices
 - `--interval`: Polling interval in seconds for monitor mode (default: 5)
+- `-nr, --no-root`: Bypass root/sudo check (use with caution, time sync will likely fail)
+
+### GPS Simulator
+
+A GPS simulator is included in the `gps-simulator` directory. This can be used for testing `gps-timesync` without a physical GPS device. It creates a pseudo-terminal (on Linux) or uses a specified COM port (on Windows) to emit NMEA sentences.
+
+For detailed instructions on building and running the simulator, please see the [gps-simulator/README.md](gps-simulator/README.md).
 
 ### Interactive Mode
 

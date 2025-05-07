@@ -1,19 +1,29 @@
-.PHONY: all build clean install uninstall run
+.PHONY: all build clean install uninstall run build-simulator run-simulator
 
 BINARY_NAME=gps-timesync
+SIMULATOR_DIR=gps-simulator
+SIMULATOR_BINARY_NAME=gps-simulator
 GO=go
 ARGS=
+SIM_ARGS=
 
-all: build
+all: build build-simulator
 
 build:
 	$(GO) build -o $(BINARY_NAME) main.go
 
+build-simulator:
+	cd $(SIMULATOR_DIR) && $(GO) build -o $(SIMULATOR_BINARY_NAME) simulator.go
+
 clean:
 	rm -f $(BINARY_NAME)
+	rm -f $(SIMULATOR_DIR)/$(SIMULATOR_BINARY_NAME)
 
 run:
 	$(GO) run main.go $(ARGS)
+
+run-simulator:
+	cd $(SIMULATOR_DIR) && $(GO) run simulator.go $(SIM_ARGS)
 
 install: build
 	install -d $(DESTDIR)/usr/bin
