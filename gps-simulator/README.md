@@ -2,7 +2,7 @@
 
 This program simulates a GPS device by emitting NMEA sentences ($GPRMC and $GPGGA) over a serial interface. It can be used to test the `gps-timesync` application without requiring a physical GPS device.
 
-The simulator works on both Linux and Windows.
+The simulator works on both Linux and Windows and includes features like position movement simulation and realistic satellite constellation simulation.
 
 ## Prerequisites
 
@@ -25,11 +25,36 @@ You will need to create a virtual serial port pair. Tools like `com0com` (freely
 
 ## Running the Simulator
 
-### Option 1: Using the built executable
+### Command Line Options
 
-When running the simulator, you can specify the NMEA talker ID and the number of satellites for GPGGA sentences:
+The simulator supports several command line options:
+
 *   `-talker <ID>`: Sets the NMEA Talker ID (e.g., `GP`, `GN`, `GL`, `GA`). Defaults to `GP`.
 *   `-sats <num>`: Sets the number of satellites reported as in use in the `$__GGA` sentence (0-12). Defaults to `7`.
+*   `-move`: Enable position movement simulation. Defaults to false.
+*   `-speed <value>`: Movement speed in degrees per second. Defaults to 0.0001.
+*   `-bearing <degrees>`: Movement bearing in degrees from north (0-360). Defaults to 0.
+
+### Examples
+
+#### Basic Usage
+```bash
+./gps-simulator
+```
+
+#### With Movement Simulation
+```bash
+./gps-simulator -move -speed 0.0002 -bearing 45
+```
+This will simulate movement at 0.0002 degrees per second in a northeast direction (45 degrees).
+
+#### With GNSS Constellation
+```bash
+./gps-simulator -talker GN -sats 10
+```
+This will simulate a mixed GPS/GLONASS constellation with 10 satellites in view.
+
+### Platform-Specific Usage
 
 #### Linux
 1.  Run the simulator:
@@ -43,49 +68,28 @@ When running the simulator, you can specify the NMEA talker ID and the number of
     ```
     Take note of this device path (e.g., `/dev/pts/X`).
 
-Example with flags:
-    ```bash
-    ./gps-simulator -talker GN -sats 10
-    ```
-
 #### Windows
-1.  Run the simulator, specifying one of the COM ports from your virtual pair, and optionally the talker ID and satellite count:
+1.  Run the simulator, specifying one of the COM ports from your virtual pair:
     ```bash
-    ./gps-simulator.exe -com COM3 -talker GN -sats 10
+    ./gps-simulator.exe -com COM3
     ```
     (Replace `COM3` with the actual COM port name you intend for the simulator to use).
-    The simulator will log that it's using this port.
 
-Example with flags:
-    ```bash
-    go run simulator.go -talker GN -sats 10
-    ```
+## Features
 
-#### Windows
-    ```bash
-    go run simulator.go -com COM3 -talker GN -sats 10
-    ```
-    (Replace `COM3` with your chosen COM port).
+### Position Movement Simulation
+The simulator can simulate movement by calculating new positions based on speed and bearing. This is useful for testing applications that need to track position changes.
 
-### Option 2: Using `go run` (without building first)
+### Realistic Satellite Simulation
+* GPS PRNs (1-32) and GLONASS PRNs (65-96) are supported
+* Mixed constellation simulation when using the "GN" talker ID
+* Realistic satellite visibility patterns
+* Configurable number of satellites in view
 
-You can also run the simulator directly using `go run`:
-
-1.  Navigate to the simulator's directory:
-    ```bash
-    cd gps-simulator
-    ```
-#### Linux
-    ```bash
-    go run simulator.go
-    ```
-    Note the PTY device path as mentioned above.
-#### Windows
-    ```bash
-    go run simulator.go -com COM3
-    ```
-    (Replace `COM3` with your chosen COM port).
-
+### Error Handling
+* Automatic retry on write failures
+* Graceful handling of port disconnections
+* Detailed error logging
 
 ## Connecting `gps-timesync` to the Simulator
 
